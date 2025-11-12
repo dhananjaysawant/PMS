@@ -1,0 +1,10 @@
+*.sqlite*
+/vendor/
+/public/storage
+/.env
+
+# Composer
+/composer.lock
+
+# Logs
+*.log
