@@ -4,64 +4,121 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use App\Models\Project;
 use Illuminate\Support\Facades\Auth;
 
 class ProjectController extends Controller
 {
+    /**
+     * Display a listing of projects (cached for 10 minutes).
+     */
     public function index()
     {
-        // Only admins can view all projects
-        $projects = Project::with('tasks')->get();
-        return response()->json($projects);
+        $cacheKey = 'projects.all';
+
+        // Retrieve projects from cache or store if missing
+        $projects = Cache::remember($cacheKey, 600, function () {
+            return Project::with('tasks')->get();
+        });
+
+        return response()->json([
+            'message' => 'Project list retrieved successfully (cached)',
+            'data' => $projects
+        ], 200);
     }
 
+    /**
+     * Display a single project by ID.
+     */
     public function show($id)
     {
-        $project = Project::with('tasks')->findOrFail($id);
-        return response()->json($project);
+        $project = Project::with('tasks')->find($id);
+
+        if (!$project) {
+            return response()->json(['error' => 'Project not found'], 404);
+        }
+
+        return response()->json([
+            'message' => 'Project retrieved successfully',
+            'data' => $project
+        ], 200);
     }
 
+    /**
+     * Store a newly created project (Admin only).
+     */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'start_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date'
         ]);
 
         $project = Project::create([
-            'title' => $request->title,
-            'description' => $request->description,
-            'start_date' => $request->start_date,
-            'end_date' => $request->end_date,
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'start_date' => $validated['start_date'] ?? null,
+            'end_date' => $validated['end_date'] ?? null,
             'created_by' => Auth::id(),
         ]);
 
+        // Invalidate project cache
+        Cache::forget('projects.all');
+
         return response()->json([
             'message' => 'Project created successfully',
-            'project' => $project
+            'data' => $project
         ], 201);
     }
 
+    /**
+     * Update an existing project (Admin only).
+     */
     public function update(Request $request, $id)
     {
-        $project = Project::findOrFail($id);
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date'
+        ]);
 
-        $project->update($request->only(['title', 'description', 'start_date', 'end_date']));
+        $project = Project::find($id);
+
+        if (!$project) {
+            return response()->json(['error' => 'Project not found'], 404);
+        }
+
+        $project->update($validated);
+
+        // Invalidate project cache
+        Cache::forget('projects.all');
 
         return response()->json([
             'message' => 'Project updated successfully',
-            'project' => $project
-        ]);
+            'data' => $project
+        ], 200);
     }
 
+    /**
+     * Remove a project (Admin only).
+     */
     public function destroy($id)
     {
-        $project = Project::findOrFail($id);
+        $project = Project::find($id);
+
+        if (!$project) {
+            return response()->json(['error' => 'Project not found'], 404);
+        }
+
         $project->delete();
 
-        return response()->json(['message' => 'Project deleted successfully']);
+        // Invalidate project cache
+        Cache::forget('projects.all');
+
+        return response()->json(['message' => 'Project deleted successfully'], 200);
     }
 }

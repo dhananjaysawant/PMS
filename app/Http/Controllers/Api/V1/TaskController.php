@@ -43,6 +43,10 @@ class TaskController extends Controller
             'assigned_to' => $request->assigned_to,
         ]);
 
+         // Send queued email notification     SMTP Details needed code is working 
+    //$assignedUser = User::find($validated['assigned_to']);
+   // Notification::send($assignedUser, new TaskAssignedNotification($task));
+
         return response()->json([
             'message' => 'Task created successfully',
             'task' => $task
